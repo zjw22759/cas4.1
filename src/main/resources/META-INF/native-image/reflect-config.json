@@ -1,0 +1,32 @@
+[
+    {
+        "name": "org.apereo.cas.web.CasWebApplicationContext",
+        "allDeclaredConstructors": true
+    },
+    {
+        "name": "org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext",
+        "allDeclaredConstructors":true
+    },
+    {
+        "name": "org.quartz.impl.StdSchedulerFactory",
+        "allDeclaredConstructors":true
+    },
+    {
+        "name": "org.springframework.context.annotation.ConfigurationClassPostProcessor",
+        "allDeclaredConstructors":true
+    },
+    {
+        "name": "org.springframework.context.event.EventListenerMethodProcessor",
+        "allDeclaredConstructors":true
+    },
+    {
+        "name": "org.springframework.context.event.DefaultEventListenerFactory",
+        "allDeclaredConstructors": true
+    },
+    {
+        "name": "org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor",
+        "allDeclaredConstructors": true
+    }
+
+
+]
