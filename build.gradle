@@ -1,0 +1,178 @@
+import org.springframework.aot.gradle.dsl.AotMode
+
+buildscript {
+    repositories {
+        //mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+        maven {
+            url "https://repo.spring.io/release"
+            mavenContent { releasesOnly() }
+        }
+        maven {
+            url "https://repo.spring.io/milestone/"
+            mavenContent { releasesOnly() }
+        }
+        maven {
+            url "https://repo.spring.io/libs-milestone"
+            mavenContent { releasesOnly() }
+        }
+        maven {
+            url "https://repo.spring.io/libs-snapshot"
+            mavenContent { snapshotsOnly() }
+        }
+        maven {
+            url "https://plugins.gradle.org/m2/"
+            mavenContent { releasesOnly() }
+        }
+    }
+    dependencies {
+        classpath "de.undercouch:gradle-download-task:${project.gradleDownloadTaskVersion}"
+        classpath "org.springframework.boot:spring-boot-gradle-plugin:${project.springBootVersion}"
+        classpath "gradle.plugin.com.google.cloud.tools:jib-gradle-plugin:${project.jibVersion}"
+        classpath "io.freefair.gradle:maven-plugin:${project.gradleMavenPluginVersion}"
+        classpath "io.freefair.gradle:lombok-plugin:${project.gradleLombokPluginVersion}"
+        classpath 'io.spring.gradle:dependency-management-plugin:1.0.11.RELEASE'
+        classpath 'org.springframework.experimental.aot:org.springframework.experimental.aot.gradle.plugin:0.11.2-SNAPSHOT'
+        classpath 'org.graalvm.buildtools.native:org.graalvm.buildtools.native.gradle.plugin:0.9.9'
+    }
+}
+
+repositories {
+    //mavenLocal()
+    mavenCentral()
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots"
+        mavenContent { snapshotsOnly() }
+    }
+    maven {
+        mavenContent { releasesOnly() }
+        url "https://build.shibboleth.net/nexus/content/repositories/releases/"
+    }
+    maven {
+        mavenContent { releasesOnly() }
+        url "https://repo.spring.io/milestone/"
+    }
+    maven {
+        url "https://repo.spring.io/snapshot/"
+        mavenContent { snapshotsOnly() }
+    }
+    maven {
+        mavenContent { snapshotsOnly() }
+        url "https://oss.jfrog.org/artifactory/oss-snapshot-local"
+    }
+}
+
+def casServerVersion = project.'cas.version'
+def casWebApplicationBinaryName = "cas.war"
+
+project.ext."casServerVersion" = casServerVersion
+project.ext."casWebApplicationBinaryName" = casWebApplicationBinaryName
+
+//apply plugin: "io.freefair.war-overlay"
+apply plugin: "io.freefair.lombok"
+apply plugin: 'io.spring.dependency-management'
+apply plugin: 'org.springframework.experimental.aot'
+apply plugin: 'org.graalvm.buildtools.native'
+apply from: rootProject.file("gradle/tasks.gradle")
+
+//apply plugin: "war"
+apply plugin: "eclipse"
+apply plugin: "idea"
+apply plugin: "java"
+
+apply from: rootProject.file("gradle/springboot.gradle")
+apply from: rootProject.file("gradle/dockerjib.gradle")
+
+def buildChecks = ["default-include-all","!spring.dont.include.these.","!or.these"] as String[]
+
+springAot {
+    mode = AotMode.NATIVE
+    mainClass = 'org.apereo.cas.web.CasWebApplication'
+    applicationClass = 'org.apereo.cas.web.CasWebApplication'
+    debugVerify = true
+    removeXmlSupport = false
+    removeSpelSupport = false
+    removeYamlSupport = false
+    removeJmxSupport = true
+    verify = true
+}
+
+nativeBuild {
+//	classpath(processAotResources.outputs, compileAotJava.outputs)
+}
+
+nativeTest {
+//	classpath(processAotTestResources.outputs, compileAotTestJava.outputs)
+}
+
+dependencyManagement {
+	imports {
+        mavenBom "org.apereo.cas:cas-server-support-bom:${casServerVersion}"
+    }
+}
+dependencies {
+    if (project.hasProperty("casmodules")) {
+        def dependencies = project.getProperty("casmodules").split(",")
+        dependencies.each {
+            implementation "org.apereo.cas:cas-server-${it}:${casServerVersion}" {
+                exclude group:  'org.springframework.boot', module: 'spring-boot-devtools'
+                exclude group: 'org.apache.bval', module: 'bval-jsr'
+            }
+        }
+    }
+    // Other CAS dependencies/modules may be listed here...
+    // implementation "org.apereo.cas:cas-server-support-json-service-registry:${casServerVersion}"
+    implementation ("org.apereo.cas:cas-server-webapp-starter-tomcat:${casServerVersion}") {
+        exclude group: 'org.apereo.cas', module: 'cas-server-core-logging'
+        exclude group: 'org.springframework.boot', module: 'spring-boot-devtools'
+        exclude group: 'org.apache.logging.log4j'
+        exclude group: 'org.apache.bval', module: 'bval-jsr'
+
+    }
+    implementation ("org.apereo.cas:cas-server-support-logback:${casServerVersion}") {
+        exclude group: 'org.apache.bval', module: 'bval-jsr'
+    }
+    implementation "org.springframework.boot:spring-boot-actuator:${project.springBootVersion}"
+    implementation 'org.hibernate.validator:hibernate-validator:6.2.0.Final'
+    testImplementation "org.springframework.boot:spring-boot-starter-test:${project.springBootVersion}"
+    testImplementation "org.springframework.boot:spring-boot-autoconfigure:${project.springBootVersion}"
+    testImplementation "org.springframework.boot:spring-boot:${project.springBootVersion}"
+
+}
+
+tasks.findByName("jibDockerBuild")
+        .dependsOn(copyWebAppIntoJib, copyConfigIntoJib)
+        .finalizedBy(deleteWebAppFromJib)
+
+tasks.findByName("jib")
+        .dependsOn(copyWebAppIntoJib, copyConfigIntoJib)
+        .finalizedBy(deleteWebAppFromJib)
+
+configurations.all {
+    resolutionStrategy {
+        cacheChangingModulesFor 0, "seconds"
+        cacheDynamicVersionsFor 0, "seconds"
+
+        preferProjectModules()
+
+        def failIfConflict = project.hasProperty("failOnVersionConflict") && Boolean.valueOf(project.getProperty("failOnVersionConflict"))
+        if (failIfConflict) {
+            failOnVersionConflict()
+        }
+    }
+}
+
+eclipse {
+    classpath {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
+
+idea {
+    module {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
